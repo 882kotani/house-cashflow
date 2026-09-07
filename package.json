@@ -1,0 +1,14 @@
+{
+  "name": "household-cashflow",
+  "version": "1.0.0",
+  "description": "家庭のキャッシュフロー表 & ライフイベント表",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

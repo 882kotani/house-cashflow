@@ -1,0 +1,6 @@
+[
+  { "id": "e1", "year": 2026, "month": 4, "familyId": "f3", "category": "education", "title": "幼稚園入園", "cost": 200000, "memo": "" },
+  { "id": "e2", "year": 2032, "month": 4, "familyId": "f3", "category": "education", "title": "小学校入学", "cost": 150000, "memo": "" },
+  { "id": "e3", "year": 2030, "month": null, "familyId": "f1", "category": "car", "title": "車の買い替え", "cost": 3000000, "memo": "" },
+  { "id": "e4", "year": 2028, "month": 8, "familyId": "f1", "category": "housing", "title": "自宅リフォーム", "cost": 2000000, "memo": "" }
+]

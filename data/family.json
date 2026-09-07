@@ -1,0 +1,5 @@
+[
+  { "id": "f1", "name": "太郎", "role": "本人", "birthYear": 1988, "color": "#2f6f6a" },
+  { "id": "f2", "name": "花子", "role": "配偶者", "birthYear": 1990, "color": "#a15c3e" },
+  { "id": "f3", "name": "一郎", "role": "子", "birthYear": 2020, "color": "#6c6f9e" }
+]

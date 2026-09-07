@@ -610,6 +610,30 @@ table {
 	box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
+/* ---- キャッシュフロー表：月表示 ---- */
+
+.cf-table-month th.tl-year-head {
+	font-weight: 700;
+	color: var(--ink);
+}
+.cf-table-month th.tl-month {
+	font-size: 10.5px;
+	color: var(--ink-muted);
+	font-weight: 600;
+}
+.cf-table-month th.tl-month.is-april {
+	color: var(--event);
+	font-weight: 700;
+}
+.cf-table-month td:not(.row-label),
+.cf-table-month th:not(.row-label) {
+	min-width: 60px;
+}
+.cf-table-month tr.row-life-event td {
+	max-width: 100px;
+	font-size: 11px;
+}
+
 /* ---------------- Life-event: filters (display period / family) ---------------- */
 
 .timeline-filters {
@@ -1056,6 +1080,10 @@ table {
 	.tl-table td:not(.row-label),
 	.tl-table th:not(.row-label) {
 		min-width: 76px;
+	}
+	.cf-table-month td:not(.row-label),
+	.cf-table-month th:not(.row-label) {
+		min-width: 46px;
 	}
 
 	/* モーダルはスマホでは下から出るボトムシート形式に */

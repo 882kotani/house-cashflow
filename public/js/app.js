@@ -10,6 +10,7 @@ const state = {
 	cashflow: { startYear: 2026, years: 30, startingBalance: 0, values: {} },
 	events: [],
 	eventView: 'year', // 'year' | 'month'
+	cashflowView: 'year', // 'year' | 'month'
 	eventRange: null, // { start, end } - タイムラインの表示期間（西暦年）
 	eventFamilyFilter: null, // Set<string> - タイムラインに表示する家族ID（'__common__' は共通イベント）
 };
@@ -888,18 +889,55 @@ function renderFpInsight(targetId, perYear, years) {
 	}
 }
 
-function renderCashflow() {
-	const { startYear, years: yearCount, startingBalance } = state.cashflow;
-	document.getElementById('cf-startYear').value = startYear;
-	document.getElementById('cf-years').value = yearCount;
-	document.getElementById('cf-startingBalance').value = startingBalance;
+/* ---- monthly breakdown (for 月表示) ---- */
+/* 年間の収入・支出項目は12等分した金額を毎月表示し、ライフイベント費用だけは
+   実際に発生する月に計上することで、月ごとの貯蓄残高の増減が分かるようにする。 */
 
-	const table = document.getElementById('cashflow-table');
+function computeMonthlyTotals() {
 	const { years, incomeItems, expenseItems, perYear } = computeYearlyTotals();
+	const monthly = [];
+	let cumulative = state.cashflow.startingBalance;
 
+	years.forEach((year) => {
+		const annual = perYear[year];
+		const monthlyIncome = annual.incomeTotal / 12;
+		const monthlyExpenseItems = annual.expenseItemsTotal / 12;
+		for (let m = 1; m <= 12; m++) {
+			const eventCost = state.events
+				.filter((e) => e.year === year && (e.month || 4) === m)
+				.reduce((s, e) => s + (Number(e.cost) || 0), 0);
+			const expenseTotal = monthlyExpenseItems + eventCost;
+			const net = monthlyIncome - expenseTotal;
+			cumulative += net;
+			monthly.push({
+				year,
+				month: m,
+				incomeTotal: monthlyIncome,
+				expenseItemsTotal: monthlyExpenseItems,
+				eventCost,
+				expenseTotal,
+				net,
+				balance: cumulative,
+			});
+		}
+	});
+
+	return { years, incomeItems, expenseItems, monthly };
+}
+
+function eventsTitlesInMonth(year, month) {
+	return state.events
+		.filter((e) => e.year === year && (e.month || 4) === month)
+		.map((e) => {
+			const m = familyById(e.familyId);
+			return m ? `${e.title}（${m.name}）` : e.title;
+		})
+		.join('、');
+}
+
+function renderCashflowYearTable(table, years, incomeItems, expenseItems, perYear) {
 	const rows = [];
 
-	// --- header row ---
 	rows.push(`<thead><tr>
     <th class="row-label">年</th>
     ${years.map((y) => `<th>${y}</th>`).join('')}
@@ -907,7 +945,6 @@ function renderCashflow() {
 
 	const bodyRows = [];
 
-	// --- age rows per family member ---
 	for (const member of state.family) {
 		bodyRows.push(`<tr class="row-age">
       <td class="row-label" style="color:${member.color || '#667069'}">${escapeHtml(
@@ -917,13 +954,11 @@ function renderCashflow() {
     </tr>`);
 	}
 
-	// --- life events row ---
 	bodyRows.push(`<tr class="row-life-event">
     <td class="row-label">ライフイベント</td>
     ${years.map((y) => `<td>${escapeHtml(eventsTitlesInYear(y)) || '－'}</td>`).join('')}
   </tr>`);
 
-	// --- income section ---
 	bodyRows.push(
 		`<tr class="section-head"><td class="row-label">収入</td>${years
 			.map(() => '<td></td>')
@@ -970,7 +1005,6 @@ function renderCashflow() {
     ${years.map((y) => `<td>${yen(perYear[y].incomeTotal)}</td>`).join('')}
   </tr>`);
 
-	// --- expense section ---
 	bodyRows.push(
 		`<tr class="section-head"><td class="row-label">支出</td>${years
 			.map(() => '<td></td>')
@@ -1023,7 +1057,6 @@ function renderCashflow() {
     ${years.map((y) => `<td>${yen(perYear[y].expenseTotal)}</td>`).join('')}
   </tr>`);
 
-	// --- net & balance ---
 	bodyRows.push(`<tr class="row-net">
     <td class="row-label">年間収支</td>
     ${years
@@ -1044,11 +1077,9 @@ function renderCashflow() {
   </tr>`);
 
 	rows.push(`<tbody>${bodyRows.join('')}</tbody>`);
+	table.className = 'cf-table';
 	table.innerHTML = rows.join('');
 
-	renderFpInsight('cashflow-insight', perYear, years);
-
-	// wire up editable cells
 	table.querySelectorAll('.cell-input').forEach((input) => {
 		input.addEventListener(
 			'change',
@@ -1063,6 +1094,161 @@ function renderCashflow() {
 		);
 	});
 }
+
+function renderCashflowMonthTable(table, years, incomeItems, expenseItems) {
+	const { monthly } = computeMonthlyTotals();
+	const monthAt = (yIdx, m) => monthly[yIdx * 12 + (m - 1)];
+	const eachMonth = (fn) =>
+		years
+			.map((y, yIdx) => Array.from({ length: 12 }, (_, i) => fn(y, i + 1, yIdx)).join(''))
+			.join('');
+
+	const rows = [];
+
+	rows.push('<thead>');
+	rows.push(
+		`<tr><th class="row-label" rowspan="2">年 ／ 月</th>${years
+			.map((y) => `<th class="tl-year-head" colspan="12">${y}年</th>`)
+			.join('')}</tr>`,
+	);
+	rows.push(
+		`<tr>${years
+			.map(() =>
+				Array.from({ length: 12 }, (_, i) => {
+					const m = i + 1;
+					return `<th class="tl-month${m === 4 ? ' is-april' : ''}">${m}</th>`;
+				}).join(''),
+			)
+			.join('')}</tr>`,
+	);
+	rows.push('</thead>');
+
+	const bodyRows = [];
+
+	for (const member of state.family) {
+		bodyRows.push(`<tr class="row-age">
+      <td class="row-label" style="color:${member.color || '#667069'}">${escapeHtml(
+				member.name,
+			)}（${escapeHtml(member.role)}）</td>
+      ${eachMonth((y) => `<td>${ageInYear(member.birthYear, y)}歳</td>`)}
+    </tr>`);
+	}
+
+	bodyRows.push(`<tr class="row-life-event">
+    <td class="row-label">ライフイベント</td>
+    ${eachMonth((y, m) => `<td>${escapeHtml(eventsTitlesInMonth(y, m)) || ''}</td>`)}
+  </tr>`);
+
+	bodyRows.push(
+		`<tr class="section-head"><td class="row-label">収入</td>${eachMonth(() => '<td></td>')}</tr>`,
+	);
+	for (const item of incomeItems) {
+		const children = childrenOfItem(item.id);
+		if (children.length === 0) {
+			bodyRows.push(`<tr class="row-income">
+        <td class="row-label">${escapeHtml(item.name)}</td>
+        ${eachMonth((y) => `<td>${yen(Math.round(itemValue(item.id, y) / 12))}</td>`)}
+      </tr>`);
+		} else {
+			bodyRows.push(`<tr class="row-income row-subtotal">
+        <td class="row-label">${escapeHtml(item.name)}</td>
+        ${eachMonth((y) => `<td>${yen(Math.round(itemTotalValue(item, y) / 12))}</td>`)}
+      </tr>`);
+			for (const child of children) {
+				bodyRows.push(`<tr class="row-income row-subitem">
+          <td class="row-label">${escapeHtml(child.name)}</td>
+          ${eachMonth((y) => `<td>${yen(Math.round(itemValue(child.id, y) / 12))}</td>`)}
+        </tr>`);
+			}
+		}
+	}
+	bodyRows.push(`<tr class="row-total income">
+    <td class="row-label">収入合計</td>
+    ${eachMonth((y, m, yIdx) => `<td>${yen(Math.round(monthAt(yIdx, m).incomeTotal))}</td>`)}
+  </tr>`);
+
+	bodyRows.push(
+		`<tr class="section-head"><td class="row-label">支出</td>${eachMonth(() => '<td></td>')}</tr>`,
+	);
+	for (const item of expenseItems) {
+		const children = childrenOfItem(item.id);
+		if (children.length === 0) {
+			bodyRows.push(`<tr class="row-expense">
+        <td class="row-label">${escapeHtml(item.name)}</td>
+        ${eachMonth((y) => `<td>${yen(Math.round(itemValue(item.id, y) / 12))}</td>`)}
+      </tr>`);
+		} else {
+			bodyRows.push(`<tr class="row-expense row-subtotal">
+        <td class="row-label">${escapeHtml(item.name)}</td>
+        ${eachMonth((y) => `<td>${yen(Math.round(itemTotalValue(item, y) / 12))}</td>`)}
+      </tr>`);
+			for (const child of children) {
+				bodyRows.push(`<tr class="row-expense row-subitem">
+          <td class="row-label">${escapeHtml(child.name)}</td>
+          ${eachMonth((y) => `<td>${yen(Math.round(itemValue(child.id, y) / 12))}</td>`)}
+        </tr>`);
+			}
+		}
+	}
+	bodyRows.push(`<tr class="row-expense">
+    <td class="row-label">ライフイベント費用</td>
+    ${eachMonth((y, m, yIdx) => {
+			const c = monthAt(yIdx, m);
+			return `<td>${c.eventCost ? yen(c.eventCost) : '－'}</td>`;
+		})}
+  </tr>`);
+	bodyRows.push(`<tr class="row-total expense">
+    <td class="row-label">支出合計</td>
+    ${eachMonth((y, m, yIdx) => `<td>${yen(Math.round(monthAt(yIdx, m).expenseTotal))}</td>`)}
+  </tr>`);
+
+	bodyRows.push(`<tr class="row-net">
+    <td class="row-label">月間収支</td>
+    ${eachMonth((y, m, yIdx) => {
+			const c = monthAt(yIdx, m);
+			return `<td class="${c.net < 0 ? 'negative' : 'positive'}">${yen(Math.round(c.net))}</td>`;
+		})}
+  </tr>`);
+	bodyRows.push(`<tr class="row-balance">
+    <td class="row-label">貯蓄残高</td>
+    ${eachMonth((y, m, yIdx) => {
+			const c = monthAt(yIdx, m);
+			return `<td class="${c.balance < 0 ? 'negative' : ''}">${yen(Math.round(c.balance))}</td>`;
+		})}
+  </tr>`);
+
+	rows.push(`<tbody>${bodyRows.join('')}</tbody>`);
+	table.className = 'cf-table cf-table-month';
+	table.innerHTML = rows.join('');
+}
+
+function renderCashflow() {
+	const { startYear, years: yearCount, startingBalance } = state.cashflow;
+	document.getElementById('cf-startYear').value = startYear;
+	document.getElementById('cf-years').value = yearCount;
+	document.getElementById('cf-startingBalance').value = startingBalance;
+
+	const table = document.getElementById('cashflow-table');
+	const { years, incomeItems, expenseItems, perYear } = computeYearlyTotals();
+
+	renderFpInsight('cashflow-insight', perYear, years);
+
+	if (state.cashflowView === 'month') {
+		renderCashflowMonthTable(table, years, incomeItems, expenseItems);
+	} else {
+		renderCashflowYearTable(table, years, incomeItems, expenseItems, perYear);
+	}
+}
+
+document.getElementById('cf-view-toggle').addEventListener('click', (e) => {
+	const btn = e.target.closest('button[data-view]');
+	if (!btn) return;
+	state.cashflowView = btn.dataset.view;
+	document
+		.querySelectorAll('#cf-view-toggle button')
+		.forEach((b) => b.classList.toggle('is-active', b === btn));
+	renderCashflow();
+});
 
 document.getElementById('cf-save-settings').addEventListener('click', async () => {
 	const startYear = Number(document.getElementById('cf-startYear').value);
